@@ -1,2 +1,0 @@
-Create a sudo code on generating fibanocci series  
-what is the purpose of it
