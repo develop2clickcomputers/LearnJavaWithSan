@@ -1,2 +1,1 @@
-# LearnJavaWithSan
-Learn Java from scratch
+## Home works
