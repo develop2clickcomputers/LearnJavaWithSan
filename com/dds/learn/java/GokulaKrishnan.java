@@ -1,4 +1,4 @@
-package com.dds.tutor.java;
+package com.dds.learn.java;
 import java.util.Scanner;
 
 public class GokulaKrishnan {
