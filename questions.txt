@@ -1,12 +1,3 @@
-Create a sudo code on generating fibanocci series  
-what is the real time usage?
+What are all the different type of storages available?
 
-Find biggest numbers from a series of unordered number
-e.g., 1,4,5,2,9
-
-Find recursive numbers from a series of unordered number
-e.g., 1,4,5,2,9,4,1
-
-
-Create a file called answers.txt and update your sudo code step by step and check-in
-Also, write some real time example.
+What is GHZ Acronym?
