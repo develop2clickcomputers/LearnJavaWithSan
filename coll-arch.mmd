@@ -1,0 +1,90 @@
+flowchart TB
+%% Mermaid v10+ recommended
+
+%% ===== Users =====
+subgraph Users[Users]
+  Desk["Thick Client (WebView2 panel)"]
+  Web[Web App]
+  Chat[Teams/Slack Bot]
+end
+
+%% ===== Agent Layer =====
+subgraph Agent[Agent Layer]
+  Client[Agent Client UI]
+  MCP["MCP Server (Tool Mediator)"]
+end
+
+%% ===== Core App =====
+subgraph Core[Core App]
+  BFF[API / BFF]
+  SVC1["Collateral Services<br/>(Exposure, Calls, Inv, Opt)"]
+end
+
+%% ===== Data Layer =====
+subgraph Data[Data Layer]
+  RDB[(Primary DB)]
+  ReadPool[(Read Replica / Pool)]
+  Cache[(Redis Cache)]
+end
+
+%% ===== External Infra =====
+subgraph Ext[External Infra]
+  SWIFT[SWIFT / Custodians / Tri-party]
+  IDP[OIDC / SAML IdP]
+  Obs["Observability + Audit<br/>(OTel to Logs/Traces)"]
+end
+
+%% ===== Governance / Approvals =====
+subgraph Gov[Approvals & Policy]
+  POL[Policy / RBAC / ABAC]
+  APR[Human Approval Queue]
+end
+
+%% --- User entry points ---
+Desk -->|HTTPS| Client
+Web -->|HTTPS| Client
+Chat -->|HTTPS| Client
+
+%% --- Agent to MCP ---
+Client -->|HTTPS + OIDC| MCP
+
+%% --- Read-only path ---
+MCP -->|Read-only queries| ReadPool
+
+%% --- Tooling to Core ---
+MCP -->|Tools REST/gRPC| BFF
+
+%% --- Core to Services & Data ---
+BFF --> SVC1
+SVC1 --> RDB
+RDB -->|Replication| ReadPool
+
+%% --- Caching ---
+BFF <-->|Get/Set| Cache
+SVC1 -->|Lookups| Cache
+
+%% --- External integrations ---
+BFF -->|Settlement intents| SWIFT
+
+%% --- Identity / AuthN ---
+IDP -->|Token issuance OIDC/SAML| MCP
+IDP -->|Token issuance OIDC/SAML| BFF
+
+%% --- Observability / Audit ---
+MCP -->|OTel| Obs
+BFF -->|OTel| Obs
+SVC1 -->|OTel| Obs
+
+%% --- Governance enforced writes ---
+MCP -->|writes require| POL --> APR --> BFF
+
+%% --- Styling (optional, keeps readability) ---
+classDef layer fill:#f7f9fc,stroke:#c7d2fe,stroke-width:1px,rx:6,ry:6;
+classDef db fill:#fff7ed,stroke:#fdba74,stroke-width:1px,rx:6,ry:6;
+classDef ext fill:#f0fdf4,stroke:#86efac,stroke-width:1px,rx:6,ry:6;
+classDef gov fill:#fdf4ff,stroke:#f0abfc,stroke-width:1px,rx:6,ry:6;
+
+class Users,Agent,Core,Data,Ext layer;
+class RDB,ReadPool,Cache db;
+class SWIFT,IDP,Obs ext;
+class Gov,POL,APR gov;
