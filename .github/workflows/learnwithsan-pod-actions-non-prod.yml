@@ -1,0 +1,117 @@
+name: Pod Actions - Dev/Test AKS
+on:
+  workflow_dispatch:
+    inputs:
+      podaction:
+        type: choice
+        required: true
+        description: Select action
+        options: 
+        - start-aks
+        - restart-aks
+        - stop-aks
+      action:
+        type: choice
+        required: true
+        default: dev
+        description: Environment to apply changes to
+        options:
+        - dev
+        - tst
+  
+jobs:
+  CheckEnv:
+    name: Determine Environment    
+    runs-on: [self-hosted, linux, x64, gwam, provisioning-essentials, ubuntu-22.04, prod]
+    outputs:
+      envTag: ${{ (steps.set-dev-env.outputs.my_env  || steps.set-tst-env.outputs.my_env) }}
+      envData: ${{ steps.set-dev-env.outputs.my_envdet || steps.set-tst-env.outputs.my_envdet }}
+    environment:
+      name: ${{ github.event.inputs.action }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        
+      - name: Get Environment Details
+        id: set-env
+        run: |
+          echo Deploying to ${{ github.event.inputs.action }}
+          content=`cat aks-details/aks.json`
+          # the following lines are only required for multi line json
+          content="${content//'%'/'%25'}"
+          content="${content//$'\n'/'%0A'}"
+          content="${content//$'\r'/'%0D'}"
+          # end of optional handling for multi line json
+          echo "::set-output name=data::$content"
+      
+      - name: Set Environment Pointer to Test
+        id: set-dev-env
+        if: ${{ github.event.inputs.action == 'dev' }}
+        env: 
+          ENV_DATA: ${{ steps.set-env.outputs.data }}
+        run: |
+          envdet=$(echo $ENV_DATA | jq -c '."dev"')
+          echo "::set-output name=my_env::dev"
+          echo "::set-output name=my_envdet::$envdet"
+          echo "my environment details : $envdet"
+      - name: Set Environment Pointer to Dev
+        id: set-tst-env
+        if: ${{ github.event.inputs.action == 'tst' }}
+        env: 
+          ENV_DATA: ${{ steps.set-env.outputs.data }}
+        run: |
+          envdet=$(echo $ENV_DATA | jq -c '."tst"')
+          echo "::set-output name=my_env::tst"
+          echo "::set-output name=my_envdet::$envdet"
+          echo "my environment details : $envdet" 
+          
+  Podactions:
+    name: Pod Actions
+    needs: [ CheckEnv ]    
+    runs-on: [self-hosted, linux, x64, gwam, provisioning-essentials, ubuntu-22.04, prod]
+    environment:
+      name: ${{ github.event.inputs.action }}
+    steps:
+      - uses: actions/checkout@v2      
+      
+      - name: Show Environment
+        run: |
+          echo "${{ inputs.envTag }}"
+          echo "${{ inputs.envData }}"
+          echo "${{ needs.CheckEnv.outputs.envData }}"
+          
+      - name: remove tokens
+        run: |
+          kubelogin --version
+          kubelogin remove-tokens
+
+      - name: Connecting to Azure Kubernetes Service ( AKS )
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS_AKS_SPN }}     
+      - name: Set the target Azure Kubernetes Service (AKS) cluster
+        uses: azure/aks-set-context@v2
+        with:
+          cluster-name: ${{ fromJson(needs.CheckEnv.outputs.envData).clustername }}
+          resource-group: ${{ fromJson(needs.CheckEnv.outputs.envData).resourcegroup }}
+          admin: 'false'
+          use-kubelogin: 'true'         
+      
+      - name: Start Deployment
+        if: ${{ github.event.inputs.podaction == 'start-aks' }}     
+        run: |
+          kubectl scale deployment ${{ fromJson(needs.CheckEnv.outputs.envData).deployment }} -n ${{ fromJson(needs.CheckEnv.outputs.envData).namespace }} --replicas=1
+      - name: Stop Deployment
+        if: ${{ github.event.inputs.podaction == 'stop-aks' }}
+        run: | 
+          kubectl scale deployment ${{ fromJson(needs.CheckEnv.outputs.envData).deployment }} -n ${{ fromJson(needs.CheckEnv.outputs.envData).namespace }} --replicas=0
+      
+      - name: Restart Deployment
+        if: ${{ github.event.inputs.podaction == 'restart-aks' }}  
+        run: | 
+          kubectl rollout restart deployment ${{ fromJson(needs.CheckEnv.outputs.envData).deployment }} -n ${{ fromJson(needs.CheckEnv.outputs.envData).namespace }}
+
+      - name: remove tokens
+        run: |
+          kubelogin --version
+          kubelogin remove-tokens
